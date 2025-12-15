@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-dotenv
+mysql-connector-python
+requests
+google-generativeai
+python-multipart
+sqlalchemy
+# add any other libs your app uses (e.g., openai, requests)
