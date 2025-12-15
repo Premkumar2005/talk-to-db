@@ -25,8 +25,7 @@
 
    Edit `.env` and set:
 
-   - `HF_TOKEN` = your HuggingFace Inference API token
-   - `HF_MODEL_URL` = model endpoint (default given)
+   - `GEMINI_API_KEY`=your API key
    - DB credentials as per your MySQL setup
 
 4. Run the server:
