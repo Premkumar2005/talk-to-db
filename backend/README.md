@@ -26,7 +26,10 @@
    Edit `.env` and set:
 
    - `GEMINI_API_KEY`=your API key
+<<<<<<< HEAD
    - DB credentials as per your MySQL setup
+=======
+>>>>>>> c07c838ef0da8a9874273d4c438b7a760ef40eb0
    - DB credentials as per your MySQL setup
 
 4. Run the server:
