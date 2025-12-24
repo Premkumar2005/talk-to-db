@@ -14,7 +14,11 @@ CREATE TABLE IF NOT EXISTS transactions (
   amount DECIMAL(10,2),
   txn_date DATE,
   status VARCHAR(50),
-  FOREIGN KEY (user_id) REFERENCES users(id)
+  CONSTRAINT fk_transactions_user
+    FOREIGN KEY (user_id)
+    REFERENCES users(id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
 );
 
 INSERT INTO users (name, email) VALUES

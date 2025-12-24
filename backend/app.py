@@ -40,6 +40,8 @@ class GenerateRequest(BaseModel):
 
 class RunRequest(BaseModel):
     sql: str
+    confirm: bool = False
+
 
 # ---------- Gemini SQL Generator ----------
 def call_gemini(prompt: str) -> str:
@@ -79,31 +81,37 @@ def call_gemini(prompt: str) -> str:
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
 
-# ---------- Safe SELECT filter ----------
+def get_query_type(sql: str) -> str:
+    s = sql.strip().lower()
 
-# def is_safe_select(sql: str) -> bool:
-#     if not sql:
-#         return False
-#     s = sql.strip().lstrip(";")
+    if s.startswith("select"):
+        return "SELECT"
+    if s.startswith("insert"):
+        return "INSERT"
+    if s.startswith("update"):
+        return "UPDATE"
+    if s.startswith("delete"):
+        return "DELETE"
 
-#     # Must start with SELECT
-#     if not re.match(r"(?i)^SELECT\b", s):
-#         return False
+    return "UNKNOWN"
 
-#     forbidden = [
-#         "DELETE", "UPDATE", "INSERT", "DROP", "ALTER",
-#         "TRUNCATE", "CREATE", "REPLACE", "GRANT", "REVOKE"
-#     ]
-
-#     up = s.upper()
-#     for word in forbidden:
-#         if word in up:
-#             return False
-
-#     return True
 
 # ---------- Run query on DB ----------
-def run_sql_on_db(sql: str) -> List[dict]:
+def get_query_type(sql: str) -> str:
+    sql = sql.strip().lower()
+
+    if sql.startswith("select"):
+        return "SELECT"
+    if sql.startswith("insert"):
+        return "INSERT"
+    if sql.startswith("update"):
+        return "UPDATE"
+    if sql.startswith("delete"):
+        return "DELETE"
+
+    return "UNKNOWN"
+
+def run_sql_on_db(sql: str) -> dict:
     conn = None
     try:
         conn = mysql.connector.connect(
@@ -116,17 +124,34 @@ def run_sql_on_db(sql: str) -> List[dict]:
         )
 
         cursor = conn.cursor(dictionary=True)
+        query_type = get_query_type(sql)
+
+        if query_type == "UNKNOWN":
+            raise HTTPException(status_code=400, detail="Unsupported SQL query")
+
         cursor.execute(sql)
 
-        try:
+        # SELECT → fetch data
+        if query_type == "SELECT":
             rows = cursor.fetchall()
-        except mysql.connector.errors.InterfaceError:
-            rows = []
+            return {
+                "type": "SELECT",
+                "rows_returned": len(rows),
+                "data": rows
+            }
 
-        cursor.close()
-        return rows
+        # INSERT / UPDATE / DELETE → commit
+        conn.commit()
+
+        return {
+            "type": query_type,
+            "affected_rows": cursor.rowcount,
+            "message": f"{query_type} executed successfully"
+        }
 
     except mysql.connector.Error as err:
+        if conn:
+            conn.rollback()
         raise HTTPException(status_code=400, detail=f"MySQL error: {err}")
 
     finally:
@@ -157,20 +182,31 @@ def generate_sql(req: GenerateRequest):
     return {"generated_sql": sql}
 
 @app.post("/run-query")
+@app.post("/run-query")
 def run_query(req: RunRequest):
-    sql = req.sql
+    sql = req.sql.strip()
+    confirm = req.confirm
 
     if not sql:
         raise HTTPException(status_code=400, detail="SQL is required")
 
-    # if not is_safe_select(sql):
-    #     raise HTTPException(
-    #         status_code=400,
-    #         detail="Only safe SELECT queries are allowed!"
-    #     )
+    query_type = get_query_type(sql)
 
-    rows = run_sql_on_db(sql)
-    return {"rows_returned": len(rows), "data": rows}
+    # 🚨 Block dangerous queries
+    if re.search(r"\b(drop|truncate|alter|create)\b", sql, re.I):
+        raise HTTPException(status_code=403, detail="Dangerous query blocked")
+
+    # ⚠️ Ask confirmation for non-SELECT
+    if query_type in ["INSERT", "UPDATE", "DELETE"] and not confirm:
+        return {
+            "needs_confirmation": True,
+            "query_type": query_type,
+            "message": f"This {query_type} query will modify the database. Please confirm."
+        }
+
+    result = run_sql_on_db(sql)
+    return result
+
 
 # ---------- Uvicorn ----------
 if __name__ == "__main__":

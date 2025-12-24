@@ -9,8 +9,12 @@ function App() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState("generate"); // 'generate' or 'run'
+  const [pendingSQL, setPendingSQL] = useState(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+
 
   const [error, setError] = useState("");
+
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -38,19 +42,61 @@ function App() {
       alert("No SQL to run. Generate first.");
       return;
     }
+
     setLoading(true);
     setError("");
+
     try {
-      const res = await axios.post(`${BACKEND_URL}/run-query`, { sql: generatedSql });
+      const res = await axios.post(`${BACKEND_URL}/run-query`, {
+        sql: generatedSql,
+        confirm: false
+      });
+
+      // 🚨 Backend asks for confirmation
+      if (res.data.needs_confirmation) {
+        setPendingSQL(generatedSql);
+        setShowConfirm(true);
+        return;
+      }
+
+      // ✅ SELECT result
       setRows(res.data.data || []);
     } catch (err) {
-      console.error(err);
       const msg = err?.response?.data?.detail || err.message || "Unknown error";
       setError("Error running SQL: " + msg);
     } finally {
       setLoading(false);
     }
   };
+  const handleConfirm = async () => {
+    if (!pendingSQL) return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await axios.post(`${BACKEND_URL}/run-query`, {
+        sql: pendingSQL,
+        confirm: true
+      });
+
+      // write queries don’t return rows
+      if (res.data.data) {
+        setRows(res.data.data);
+      } else {
+        setRows([]);
+        alert(res.data.message || "Query executed successfully");
+      }
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err.message || "Unknown error";
+      setError("Error running SQL: " + msg);
+    } finally {
+      setLoading(false);
+      setShowConfirm(false);
+      setPendingSQL(null);
+    }
+  };
+
 
   const firstRow = rows[0] || null;
   const columns = firstRow ? Object.keys(firstRow) : [];
@@ -328,6 +374,53 @@ function App() {
           <div>Backend: FastAPI + Gemini Inference API + MySQL | Frontend: React + Vite</div>
         </footer>
       </div>
+      {showConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 50,
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              padding: "20px",
+              borderRadius: "12px",
+              width: "320px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>⚠️ Confirm Action</h3>
+            <p style={{ fontSize: "14px", color: "#334155" }}>
+              This query will modify the database. Are you sure?
+            </p>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+              <button
+                onClick={() => {
+                  setShowConfirm(false);
+                  setPendingSQL(null);
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleConfirm}
+                style={{ background: "#dc2626", color: "white" }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
