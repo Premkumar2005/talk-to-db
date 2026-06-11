@@ -81,21 +81,6 @@ def call_gemini(prompt: str) -> str:
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Gemini API error: {str(e)}")
 
-def get_query_type(sql: str) -> str:
-    s = sql.strip().lower()
-
-    if s.startswith("select"):
-        return "SELECT"
-    if s.startswith("insert"):
-        return "INSERT"
-    if s.startswith("update"):
-        return "UPDATE"
-    if s.startswith("delete"):
-        return "DELETE"
-
-    return "UNKNOWN"
-
-
 # ---------- Run query on DB ----------
 def get_query_type(sql: str) -> str:
     sql = sql.strip().lower()
@@ -110,6 +95,7 @@ def get_query_type(sql: str) -> str:
         return "DELETE"
 
     return "UNKNOWN"
+
 
 def run_sql_on_db(sql: str) -> dict:
     conn = None
@@ -181,7 +167,6 @@ def generate_sql(req: GenerateRequest):
     sql = call_gemini(req.prompt.strip())
     return {"generated_sql": sql}
 
-@app.post("/run-query")
 @app.post("/run-query")
 def run_query(req: RunRequest):
     sql = req.sql.strip()

@@ -10,3 +10,9 @@ node_modules/
 
 # OS
 .DS_Store
+
+#my resource
+db/manage.ipynb
+HANDBOOK.md
+*.txt
+*.log
